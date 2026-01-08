@@ -1,45 +1,52 @@
 import streamlit as st
-from google import genai
+import google.generativeai as genai
 import PyPDF2
 import time
 
-# --- 1. CONFIGURATION ---
-try:
-    API_KEY = st.secrets["GOOGLE_API_KEY"]
-except:
-    st.error("⚠️ API Key missing in Secrets!")
+# --- 1. MULTI-KEY SETUP ---
+# In your Streamlit Secrets, save keys as: KEY1="...", KEY2="...", KEY3="..."
+KEYS = [st.secrets.get("KEY1"), st.secrets.get("KEY2"), st.secrets.get("KEY3")]
+# Filter out any keys you haven't added yet
+VALID_KEYS = [k for k in KEYS if k]
+
+if not VALID_KEYS:
+    st.error("⚠️ No API keys found! Add KEY1, KEY2, etc. to Secrets.")
     st.stop()
 
-client = genai.Client(api_key=API_KEY)
-
-# --- 2. USAGE TRACKER (Session-based) ---
-if "message_count" not in st.session_state:
-    st.session_state.message_count = 0
+# --- 2. THE ROTATION ENGINE ---
+def get_ai_response(full_context):
+    """Try each key until one works."""
+    for i, key in enumerate(VALID_KEYS):
+        try:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(full_context)
+            return response.text, i + 1  # Returns text and which key worked
+        except Exception as e:
+            if "429" in str(e):
+                continue # Try the next key
+            else:
+                return f"❌ Error: {e}", None
+    return "🛑 ALL KEYS EXHAUSTED. Please wait 1 hour.", None
 
 # --- 3. PAGE SETUP ---
-st.set_page_config(page_title="My Research AI", page_icon="📚")
-st.title("Manideep's Research Assistant 🚀")
+st.set_page_config(page_title="Permanent Research AI", page_icon="🚀")
+st.title("Manideep's Pro Assistant 🚀")
 
-# --- 4. SIDEBAR & METRICS ---
 with st.sidebar:
-    st.header("Upload Document")
-    uploaded_file = st.file_uploader("Choose a PDF", type="pdf")
-    
-    # Display the usage counter
-    st.markdown("---")
-    st.subheader("📊 Your Daily Usage")
-    # 1000 is the standard daily limit for Flash-lite in 2026
-    remaining = 1000 - st.session_state.message_count
-    st.metric(label="Messages Sent", value=st.session_state.message_count, delta=f"{remaining} left")
+    st.header("Settings")
+    uploaded_file = st.file_uploader("Upload PDF", type="pdf")
+    st.write(f"Connected Keys: {len(VALID_KEYS)}")
     
     pdf_text = ""
     if uploaded_file:
         reader = PyPDF2.PdfReader(uploaded_file)
-        for page in reader.pages:
+        # Limit to 30 pages to keep requests "light"
+        for page in reader.pages[:30]:
             pdf_text += page.extract_text()
-        st.success(f"✅ Loaded {len(reader.pages)} pages!")
+        st.success(f"✅ Document Ready")
 
-# --- 5. CHAT LOGIC ---
+# --- 4. CHAT INTERFACE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -47,25 +54,17 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask about your PDF..."):
-    # Increment the counter immediately
-    st.session_state.message_count += 1
-    
+if prompt := st.chat_input("Ask anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        message_placeholder.markdown("Thinking...")
-        context = f"Context: {pdf_text}\n\nQuestion: {prompt}" if pdf_text else prompt
-        
-        try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-lite", 
-                contents=context
-            )
-            message_placeholder.markdown(response.text)
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
-        except Exception as e:
-            message_placeholder.error(f"❌ Error: {e}")
+        with st.spinner("🔄 Searching for an active API key..."):
+            context = f"Context: {pdf_text}\n\nQuestion: {prompt}" if pdf_text else prompt
+            answer, key_num = get_ai_response(context)
+            
+            st.markdown(answer)
+            if key_num:
+                st.caption(f"Used Key #{key_num}")
+            st.session_state.messages.append({"role": "assistant", "content": answer})
