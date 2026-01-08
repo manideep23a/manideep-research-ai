@@ -12,14 +12,26 @@ except:
 
 client = genai.Client(api_key=API_KEY)
 
-# --- 2. PAGE SETUP ---
+# --- 2. USAGE TRACKER (Session-based) ---
+if "message_count" not in st.session_state:
+    st.session_state.message_count = 0
+
+# --- 3. PAGE SETUP ---
 st.set_page_config(page_title="My Research AI", page_icon="📚")
 st.title("Manideep's Research Assistant 🚀")
 
-# --- 3. SIDEBAR & UPLOAD ---
+# --- 4. SIDEBAR & METRICS ---
 with st.sidebar:
     st.header("Upload Document")
     uploaded_file = st.file_uploader("Choose a PDF", type="pdf")
+    
+    # Display the usage counter
+    st.markdown("---")
+    st.subheader("📊 Your Daily Usage")
+    # 1000 is the standard daily limit for Flash-lite in 2026
+    remaining = 1000 - st.session_state.message_count
+    st.metric(label="Messages Sent", value=st.session_state.message_count, delta=f"{remaining} left")
+    
     pdf_text = ""
     if uploaded_file:
         reader = PyPDF2.PdfReader(uploaded_file)
@@ -27,7 +39,7 @@ with st.sidebar:
             pdf_text += page.extract_text()
         st.success(f"✅ Loaded {len(reader.pages)} pages!")
 
-# --- 4. CHAT LOGIC ---
+# --- 5. CHAT LOGIC ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -36,6 +48,9 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 if prompt := st.chat_input("Ask about your PDF..."):
+    # Increment the counter immediately
+    st.session_state.message_count += 1
+    
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -45,24 +60,12 @@ if prompt := st.chat_input("Ask about your PDF..."):
         message_placeholder.markdown("Thinking...")
         context = f"Context: {pdf_text}\n\nQuestion: {prompt}" if pdf_text else prompt
         
-        # --- SMART RETRY LOGIC ---
-        success = False
-        retries = 0
-        while not success and retries < 3:
-            try:
-                # Switching to 2.5-flash-lite for stable free tier access
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash-lite", 
-                    contents=context
-                )
-                message_placeholder.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                success = True
-            except Exception as e:
-                if "429" in str(e):
-                    retries += 1
-                    message_placeholder.warning(f"⚠️ System busy. Retrying in {retries*5}s...")
-                    time.sleep(retries * 5)
-                else:
-                    message_placeholder.error(f"❌ Error: {e}")
-                    break
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite", 
+                contents=context
+            )
+            message_placeholder.markdown(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+        except Exception as e:
+            message_placeholder.error(f"❌ Error: {e}")
