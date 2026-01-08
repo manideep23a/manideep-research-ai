@@ -9,7 +9,7 @@ except:
     st.error("⚠️ API Key missing in Secrets!")
     st.stop()
 
-# New Client Setup for 2026
+# Initialize the new 2026 Client
 client = genai.Client(api_key=API_KEY)
 
 # --- 2. PAGE SETUP ---
@@ -22,10 +22,15 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Choose a PDF", type="pdf")
     pdf_text = ""
     if uploaded_file:
-        reader = PyPDF2.PdfReader(uploaded_file)
-        for page in reader.pages:
-            pdf_text += page.extract_text()
-        st.success(f"✅ Loaded {len(reader.pages)} pages!")
+        try:
+            reader = PyPDF2.PdfReader(uploaded_file)
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    pdf_text += text
+            st.success(f"✅ Loaded {len(reader.pages)} pages!")
+        except Exception as e:
+            st.error(f"Error reading PDF: {e}")
 
 # --- 4. CHAT LOGIC ---
 if "messages" not in st.session_state:
@@ -41,11 +46,19 @@ if prompt := st.chat_input("Ask about your PDF..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        context = f"Context: {pdf_text}\n\nQuestion: {prompt}" if pdf_text else prompt
-        # Using the new 2.0 Flash model
-        response = client.models.generate_content(
-            model="gemini-2.0-flash", 
-            contents=context
-        )
-        st.markdown(response.text)
-        st.session_state.messages.append({"role": "assistant", "content": response.text})
+        message_placeholder = st.empty()
+        message_placeholder.markdown("Thinking...")
+        
+        # Combine PDF text and user question
+        full_message = f"Document Content:\n{pdf_text}\n\nQuestion: {prompt}" if pdf_text else prompt
+        
+        try:
+            # Using the experimental 2.0 flash name which is often more stable for API calls
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-exp", 
+                contents=full_message
+            )
+            message_placeholder.markdown(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+        except Exception as e:
+            message_placeholder.error(f"⚠️ API Error: {e}")
