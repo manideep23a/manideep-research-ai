@@ -2,57 +2,56 @@ import streamlit as st
 from google import genai
 import time
 
-st.set_page_config(page_title="Manideep AI", layout="centered")
-st.title("🤖 Manideep AI Assistant")
-st.caption("Gemini – Auto Model Detection (Permanent Fix)")
+# ------------------ PAGE CONFIG ------------------
+st.set_page_config(
+    page_title="Manideep AI",
+    layout="centered"
+)
 
-# -------- LOAD KEY --------
+st.title("🤖 Manideep AI Assistant")
+st.caption("Powered by Google Gemini (Stable & Supported)")
+
+# ------------------ LOAD API KEY ------------------
 API_KEY = st.secrets.get("GEMINI_KEY_1")
 
 if not API_KEY:
-    st.error("❌ Gemini API key missing in Streamlit secrets.")
+    st.error("❌ Gemini API key not found in Streamlit secrets.")
     st.stop()
 
+# ------------------ INIT CLIENT ------------------
 client = genai.Client(api_key=API_KEY)
 
-# -------- FIND A WORKING MODEL --------
-@st.cache_resource
-def get_working_model():
-    models = client.models.list()
-    for m in models:
-        if "generateContent" in (m.supported_generation_methods or []):
-            return m.name
-    return None
+# ------------------ MODEL (PERMANENT) ------------------
+MODEL_NAME = "models/gemini-1.0-pro"
 
-MODEL_NAME = get_working_model()
+# ------------------ RATE LIMIT ------------------
+if "last_request_time" not in st.session_state:
+    st.session_state.last_request_time = 0
 
-if not MODEL_NAME:
-    st.error("❌ No text-generation models enabled for this API key.")
-    st.caption("Create a NEW API key from Google AI Studio.")
-    st.stop()
+COOLDOWN_SECONDS = 15
 
-st.success(f"✅ Using model: {MODEL_NAME}")
+# ------------------ UI ------------------
+prompt = st.text_area(
+    "Enter your prompt",
+    placeholder="Ask anything...",
+    height=150
+)
 
-# -------- RATE LIMIT --------
-if "last_time" not in st.session_state:
-    st.session_state.last_time = 0
-
-COOLDOWN = 15
-
-prompt = st.text_area("Enter your prompt", height=150)
 generate = st.button("🚀 Generate")
 
+# ------------------ LOGIC ------------------
 if generate:
     now = time.time()
-    if now - st.session_state.last_time < COOLDOWN:
-        st.warning("⏳ Please wait before next request.")
+
+    if now - st.session_state.last_request_time < COOLDOWN_SECONDS:
+        st.warning("⏳ Please wait a few seconds before trying again.")
         st.stop()
 
     if not prompt.strip():
-        st.warning("⚠️ Enter a prompt.")
+        st.warning("⚠️ Please enter a prompt.")
         st.stop()
 
-    st.session_state.last_time = now
+    st.session_state.last_request_time = now
 
     try:
         with st.spinner("Thinking..."):
@@ -60,8 +59,18 @@ if generate:
                 model=MODEL_NAME,
                 contents=prompt
             )
-        st.write(response.text)
+
+        if response and response.text:
+            st.success("✅ Response generated")
+            st.write(response.text)
+        else:
+            st.error("❌ Empty response from Gemini.")
 
     except Exception as e:
         st.error("🚫 Gemini request failed.")
+        st.caption("This usually means the API key is not enabled for Gemini.")
         st.code(str(e))
+
+# ------------------ FOOTER ------------------
+st.divider()
+st.caption("⚠️ Cooldown enabled to protect free-tier quota")
