@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 st.title("🤖 Manideep AI Assistant")
-st.caption("Powered by Google Gemini (Stable SDK)")
+st.caption("Powered by Google Gemini (Stable v1beta)")
 
 # ------------------ LOAD API KEYS ------------------
 API_KEYS = [
@@ -34,7 +34,7 @@ def get_client():
 if "last_request_time" not in st.session_state:
     st.session_state.last_request_time = 0
 
-COOLDOWN_SECONDS = 12
+COOLDOWN_SECONDS = 15
 
 # ------------------ UI ------------------
 prompt = st.text_area(
@@ -64,7 +64,7 @@ if generate:
         with st.spinner("Thinking..."):
             client = get_client()
             response = client.models.generate_content(
-                model="gemini-1.5-flash-001",
+                model="gemini-pro",
                 contents=prompt
             )
 
@@ -75,8 +75,8 @@ if generate:
             st.error("❌ Empty response from Gemini.")
 
     except Exception as e:
-        st.error("🚫 Quota exceeded or key issue.")
-        st.caption("Try again later or replace API keys.")
+        st.error("🚫 Gemini request failed.")
+        st.caption("This is usually quota or project restriction.")
         st.code(str(e))
 
 # ------------------ FOOTER ------------------
