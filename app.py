@@ -6,13 +6,13 @@ import time
 # ------------------ PAGE CONFIG ------------------
 st.set_page_config(
     page_title="Manideep AI (Gemini)",
-    layout="centered",
+    layout="centered"
 )
 
 st.title("🤖 Manideep AI Assistant")
-st.caption("Powered by Google Gemini • Stable SDK")
+st.caption("Powered by Google Gemini (Stable SDK)")
 
-# ------------------ API KEYS ------------------
+# ------------------ LOAD API KEYS ------------------
 API_KEYS = [
     st.secrets.get("GEMINI_KEY_1"),
     st.secrets.get("GEMINI_KEY_2"),
@@ -30,11 +30,11 @@ key_cycle = itertools.cycle(API_KEYS)
 def get_client():
     return genai.Client(api_key=next(key_cycle))
 
-# ------------------ RATE LIMIT ------------------
+# ------------------ RATE LIMIT PROTECTION ------------------
 if "last_request_time" not in st.session_state:
     st.session_state.last_request_time = 0
 
-COOLDOWN_SECONDS = 10
+COOLDOWN_SECONDS = 12
 
 # ------------------ UI ------------------
 prompt = st.text_area(
@@ -43,9 +43,9 @@ prompt = st.text_area(
     height=150
 )
 
-generate = st.button("🚀 Generate Response")
+generate = st.button("🚀 Generate")
 
-# ------------------ LOGIC ------------------
+# ------------------ MAIN LOGIC ------------------
 if generate:
     now = time.time()
     elapsed = now - st.session_state.last_request_time
@@ -64,7 +64,7 @@ if generate:
         with st.spinner("Thinking..."):
             client = get_client()
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-1.5-flash-001",
                 contents=prompt
             )
 
@@ -75,10 +75,10 @@ if generate:
             st.error("❌ Empty response from Gemini.")
 
     except Exception as e:
-        st.error("🚫 Quota exceeded or keys exhausted.")
+        st.error("🚫 Quota exceeded or key issue.")
         st.caption("Try again later or replace API keys.")
         st.code(str(e))
 
 # ------------------ FOOTER ------------------
 st.divider()
-st.caption("⚠️ Cooldown enabled to protect API quota")
+st.caption("⚠️ Cooldown enabled to protect Gemini free-tier quota")
